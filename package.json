@@ -1,11 +1,13 @@
 {
-  "name": "blobmixer",
+  "name": "ghoststudio-carousel",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "Interactive 3D Ghost Studio carousel for Webflow embedding",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:webflow": "vite build && echo 'Build complete! Upload /dist folder contents to your hosting for Webflow embedding.'",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -3,11 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GhostStudio</title>
+    <title>GhostStudio Carousel</title>
+    <meta name="description" content="Interactive 3D Ghost Studio carousel with dynamic materials and backgrounds">
   </head>
-  <body class="bg-[#333] overflow-hidden m-0 p-0">
-    <!-- Three.js Canvas (everything rendered in Three.js) -->
-    <canvas id="canvas" class="fixed inset-0 w-full h-full pointer-events-auto"></canvas>
+  <body>
+    <div id="app">
+      <!-- Three.js Canvas -->
+      <canvas id="canvas"></canvas>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -1,3 +1,4 @@
+/* Reset and base styles - Webflow compatible */
 *{
     margin: 0;
     padding: 0;
@@ -7,84 +8,105 @@
 @font-face {
     font-family: "aften_screen";
     src: url("./aften_screen.woff?#iefix");
-  }
+}
   
-  html,
-  body {
+/* Main container - flexible for Webflow embedding */
+html,
+body {
     background-color: #141518;
-    font-family: "aften_screen";
+    font-family: "aften_screen", Arial, sans-serif;
     overflow: hidden;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     cursor: grab;
     user-select: none;
-  }
-  
-  body:active {
+    position: relative;
+}
+
+/* Ensure canvas container takes full size */
+#app {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    min-height: 400px; /* Minimum height for small containers */
+}
+
+#canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+body:active {
     cursor: grabbing;
-  }
-  
-  a {
+}
+
+a {
     text-decoration: none;
     align-items: center;
     color: #fff;
     pointer-events: auto;
     font-size: 1.1rem;
-  }
-  
-  nav {
+}
+
+nav {
     position: absolute;
     top: 0;
     left: 0;
     display: flex;
     justify-content: space-between;
-    width: 100vw;
+    width: 100%;
     padding: 4.5vh;
-  }
-  
-  nav div {
+    z-index: 10;
+}
+
+nav div {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-  }
-  
-  .bottom {
+}
+
+.bottom {
     position: absolute;
     bottom: 4.5vh;
     left: 4.5vh;
-  }
-  
-  .bottom svg {
+    z-index: 10;
+}
+
+.bottom svg {
     width: auto;
     height: 40px;
     opacity: 0.8;
     transition: opacity 0.3s ease;
-  }
-  
-  .top {
+}
+
+.top {
     position: absolute;
     top: 4.5vh;
     left: 4.5vh;
-  }
+    z-index: 10;
+}
 
-  .top svg {
+.top svg {
     width: auto;
     height: 40px;
     opacity: 0.8;
     transition: opacity 0.3s ease;
-  }
+}
 
-  .topright {
+.topright {
     position: absolute;
     top: 4.5vh;
     right: 4.5vh;
-  }
+    z-index: 10;
+}
 
-  .bottom svg:hover {
+.bottom svg:hover,
+.top svg:hover {
     opacity: 1;
-  }
-  
-  .progress-bar {
+}
+
+.progress-bar {
     background: hsla(0, 0%, 100%, 0.2);
     bottom: 4.5vh;
     height: 1px;
@@ -92,9 +114,10 @@
     position: absolute;
     right: 4.5vh;
     width: 14vw;
-  }
-  
-  .progress-bar .progress {
+    z-index: 10;
+}
+
+.progress-bar .progress {
     background: #fff;
     height: 1px;
     left: 0;
@@ -105,65 +128,66 @@
     -webkit-transform-origin: left center;
     transform-origin: left center;
     width: 100%;
-  }
-  
-  .circle {
+}
+
+.circle {
     position: absolute;
     bottom: 7%;
     left: 50%;
     transform: translate(-50%, 0%);
-  }
-  
-  .circle .inner {
+    z-index: 10;
+}
+
+.circle .inner {
     position: absolute;
     left: 0;
     top: 0;
-  }
-  
-  .ring {
+}
+
+.ring {
     animation: rotate 10s linear infinite;
-  }
-  
-  @keyframes rotate {
+}
+
+@keyframes rotate {
     0% {
-      transform: rotate(0deg);
+        transform: rotate(0deg);
     }
     100% {
-      transform: rotate(360deg);
+        transform: rotate(360deg);
     }
-  }
-  
-  #loader {
+}
+
+#loader {
     width: 20%;
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 100;
-  }
-  
-  #loader p {
+}
+
+#loader p {
     color: white;
     font-size: large;
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, 0%);
-  }
-  
-  .fade {
+}
+
+.fade {
     opacity: 0;
     animation: fadeIn 3s 2s forwards;
-  }
-  
-  @keyframes fadeIn {
+}
+
+@keyframes fadeIn {
     to {
-      opacity: 1;
+        opacity: 1;
     }
-  }
-  
-  /* Navigation hints */
-  .nav-hint {
+}
+
+/* Navigation hints */
+.nav-hint {
     position: absolute;
     bottom: 15vh;
     left: 50%;
@@ -174,21 +198,23 @@
     pointer-events: none;
     animation: fadeIn 2s 3s forwards;
     opacity: 0;
-  }
-  
-  .nav-hint span {
+    z-index: 10;
+}
+
+.nav-hint span {
     display: block;
     margin: 0.2rem 0;
-  }
+}
 
-  /* Connect Button */
-  .connect-button {
+/* Connect Button */
+.connect-button {
     position: absolute;
     bottom: 4.5vh;
     right: 4.5vh;
-  }
+    z-index: 10;
+}
 
-  .btn-connect {
+.btn-connect {
     display: inline-block;
     padding: 12px 24px;
     background: rgba(14, 14, 14, 0.4);
@@ -196,21 +222,62 @@
     border-radius: 25px;
     color: #fff;
     font-size: 1rem;
-    font-family: "aften_screen", sans-serif;
+    font-family: "aften_screen", Arial, sans-serif;
     text-decoration: none;
     transition: all 0.3s ease;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-  }
+}
 
-  .btn-connect:hover {
-    background: rgba(28, 27, 27, 0.3);
+.btn-connect:hover {
+    background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.6);
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-  }
+}
 
-  .btn-connect:active {
+.btn-connect:active {
     transform: translateY(0);
-  }
+}
+
+/* Responsive design for Webflow embedding */
+@media (max-width: 768px) {
+    nav {
+        padding: 2vh;
+    }
+    
+    .bottom, .top, .topright {
+        padding: 2vh;
+    }
+    
+    .bottom {
+        bottom: 2vh;
+        left: 2vh;
+    }
+    
+    .top {
+        top: 2vh;
+        left: 2vh;
+    }
+    
+    .topright {
+        top: 2vh;
+        right: 2vh;
+    }
+    
+    .progress-bar {
+        bottom: 2vh;
+        right: 2vh;
+        width: 20vw;
+    }
+    
+    .connect-button {
+        bottom: 2vh;
+        right: 2vh;
+    }
+    
+    .nav-hint {
+        bottom: 10vh;
+        font-size: 0.7rem;
+    }
+}
   
