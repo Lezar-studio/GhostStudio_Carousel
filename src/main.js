@@ -2,6 +2,9 @@ import "./style.css";
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import textVertex from '../shaders/textVertex.glsl';
 import gsap from 'gsap';
 import { createStore } from 'zustand/vanilla';
@@ -65,7 +68,7 @@ const blobs = [
         backgroundTexture: './backgrounds/BG 1.png'
     },
     {
-        name: '& Web dev agency', 
+        name: '& Web dev agency',
         background: '#06E6FF',
         gradientEnd: '#FDFDFD',
         useGradient: true,
@@ -109,7 +112,8 @@ let camera = orthographicCamera;
 
 const renderer = new THREE.WebGLRenderer({
     canvas: document.querySelector('#canvas'),
-    antialias: true
+    antialias: true,
+    alpha: true // Enable transparency
 });
 
 // Initialize store
@@ -118,24 +122,106 @@ store.setTotalBlobs(blobs.length);
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0); // Transparent background
+renderer.shadowMap.enabled = true; // Enable shadows for better depth
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadows
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2; // Increased for more vibrant colors
+renderer.toneMappingExposure = 0.9; // Increased for brighter reflective highlights
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+// Enhanced contrast post-processing shader
+const ContrastShader = {
+    uniforms: {
+        'tDiffuse': { value: null },
+        'contrast': { value: 1.5 }, // Increase contrast
+        'brightness': { value: 1.1 }, // Slightly reduce brightness
+        'saturation': { value: 1.1 } // Boost saturation
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float contrast;
+        uniform float brightness;
+        uniform float saturation;
+        varying vec2 vUv;
+        
+        void main() {
+            vec4 color = texture2D(tDiffuse, vUv);
+            
+            // Apply brightness
+            color.rgb += brightness;
+            
+            // Apply contrast
+            color.rgb = (color.rgb - 0.5) * contrast + 0.5;
+            
+            // Apply saturation
+            float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+            color.rgb = mix(vec3(gray), color.rgb, saturation);
+            
+            // Clamp values
+            color.rgb = clamp(color.rgb, 0.0, 1.0);
+            
+            gl_FragColor = color;
+        }
+    `
+};
+
+// Set up post-processing
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+const contrastPass = new ShaderPass(ContrastShader);
+
+composer.addPass(renderPass);
+composer.addPass(contrastPass);
+composer.setSize(window.innerWidth, window.innerHeight);
 
 // Global variables for the model and texture materials
 let ghostModel = null;
 let embeddedMaterials = {}; // Store original embedded materials from GLB
 let textureMaterials = {}; // Store PNG texture-based materials
 let currentMaterialIndex = 0;
-let backgroundPlanes = [];
-let backgroundMaterials = [];
-let videoPlane = null;
 
-// Load HDRI - Using studio_small_09 for better contrast and vibrant colors
-const rgbeLoader = new RGBELoader(loadingManager);
-rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr', function(texture) {
+// Add additional lighting for better reflectivity and white edges
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white ambient light
+scene.add(ambientLight);
+
+// Key light from front-top for white edge highlights
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+keyLight.position.set(2, 3, 2);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 2048;
+keyLight.shadow.mapSize.height = 2048;
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far = 50;
+keyLight.shadow.camera.left = -10;
+keyLight.shadow.camera.right = 10;
+keyLight.shadow.camera.top = 10;
+keyLight.shadow.camera.bottom = -10;
+scene.add(keyLight);
+
+// Rim light from behind for edge definition
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+rimLight.position.set(-2, 1, -3);
+scene.add(rimLight);
+
+// Fill light from side for softer shadows
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+fillLight.position.set(-3, 0, 2);
+scene.add(fillLight);
+
+// Load local HDRI for environment reflections
+const textureLoader2 = new THREE.TextureLoader(loadingManager);
+textureLoader2.load('./env/HDRI.png', function(texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
     scene.environment = texture;
+    scene.environmentIntensity = 1.2; // Boost environment lighting
 
     // Load GLB model
     gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
@@ -151,25 +237,31 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         const loadPromises = blobs.map((blob, index) => {
             return new Promise((resolve) => {
                 textureLoader.load(blob.materialTexture, (texture) => {
-                    // Create simple material with PNG texture only (no metallic modifications)
+                    // Create reflective material with PNG texture for nice white edges
                     const material = new THREE.MeshStandardMaterial({
                         map: texture,
                         transparent: true,
                         opacity: index === 0 ? 1.0 : 0.0, // First material visible, others hidden
-                        side: THREE.DoubleSide
+                        side: THREE.DoubleSide,
+                        metalness: 0.3, // Add some metalness for reflectivity
+                        roughness: 0.4, // Lower roughness for sharper reflections
+                        envMapIntensity: 1.5 // Boost environment map reflection
                     });
                     
-                    // Keep materials pure - no metalness, roughness, or other modifications
+                    // Reflective materials for white edge highlights
                     
                     textureMaterials[`TGG${index + 1}`] = material;
                     resolve();
                 }, undefined, (error) => {
-                    // Create simple fallback material without texture
+                    // Create reflective fallback material without texture
                     const fallbackMaterial = new THREE.MeshStandardMaterial({
                         color: '#ffffff', // Default white fallback
                         transparent: true,
                         opacity: index === 0 ? 1.0 : 0.0,
-                        side: THREE.DoubleSide
+                        side: THREE.DoubleSide,
+                        metalness: 0.4, // Add some metalness for reflectivity
+                        roughness: 0.4, // Lower roughness for sharper reflections
+                        envMapIntensity: 1.5 // Boost environment map reflection
                     });
                     textureMaterials[`TGG${index + 1}`] = fallbackMaterial;
                     resolve();
@@ -375,6 +467,61 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         }
     });
 
+    // Add contrast control functions
+    window.adjustContrast = function(value) {
+        contrastPass.uniforms.contrast.value = value;
+    };
+    
+    window.adjustBrightness = function(value) {
+        contrastPass.uniforms.brightness.value = value;
+    };
+    
+    window.adjustSaturation = function(value) {
+        contrastPass.uniforms.saturation.value = value;
+    };
+    
+    // Add per-slide opacity control functions for HTML backgrounds
+    window.setSlideVideoOpacity = function(slideIndex, opacity) {
+        if (slideIndex >= 0 && slideIndex < blobs.length) {
+            // Update CSS custom property for this slide
+            const slideElement = document.querySelector(`.slide-bg[data-slide="${slideIndex}"]`);
+            if (slideElement) {
+                const videoElement = slideElement.querySelector('.bg-video');
+                if (videoElement) {
+                    videoElement.style.opacity = opacity;
+                }
+            }
+            console.log(`Slide ${slideIndex} video opacity set to ${opacity}`);
+        }
+    };
+    
+    window.setSlideBackgroundOpacity = function(slideIndex, opacity) {
+        if (slideIndex >= 0 && slideIndex < blobs.length) {
+            // Update CSS custom property for this slide
+            const slideElement = document.querySelector(`.slide-bg[data-slide="${slideIndex}"]`);
+            if (slideElement) {
+                const imageElement = slideElement.querySelector('.bg-image');
+                if (imageElement) {
+                    imageElement.style.opacity = opacity;
+                }
+            }
+            console.log(`Slide ${slideIndex} background opacity set to ${opacity}`);
+        }
+    };
+    
+    // Helper function to show current opacity settings
+    window.showOpacitySettings = function() {
+        console.log('Current opacity settings per slide:');
+        for (let i = 0; i < blobs.length; i++) {
+            const slideElement = document.querySelector(`.slide-bg[data-slide="${i}"]`);
+            if (slideElement) {
+                const videoOpacity = slideElement.querySelector('.bg-video')?.style.opacity || 'CSS default';
+                const bgOpacity = slideElement.querySelector('.bg-image')?.style.opacity || 'CSS default';
+                console.log(`Slide ${i} (${blobs[i].name}): Video=${videoOpacity}, Background=${bgOpacity}`);
+            }
+        }
+    };
+
         // Add function to change texture material opacity/alpha
         window.changeTextureMaterialOpacity = function(materialName, opacity) {
             if (!textureMaterials[materialName]) {
@@ -414,77 +561,26 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         };
 
         // Scale and position the model (maintain natural proportions)
-        ghostModel.scale.setScalar(0.7); // 50% smaller than original 1.2 scale
+        ghostModel.scale.setScalar(0.6); // 50% smaller than original 1.2 scale
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
         scene.add(ghostModel);
     });
 
-    // Responsive background system with Zustand state management
-    function getResponsiveSize() {
-        const aspect = window.innerWidth / window.innerHeight;
-        const size = Math.max(window.innerWidth, window.innerHeight) * 0.002; // Responsive scaling
-        return { width: size * aspect * 2, height: size * 2 };
-    }
-    
-    const bgSize = getResponsiveSize();
-    const backgroundGeometry = new THREE.PlaneGeometry(bgSize.width, bgSize.height);
-    const videoGeometry = new THREE.PlaneGeometry(bgSize.width * 1.2, bgSize.height * 1.2); // Slightly larger for video
-    
-    // Background planes with Zustand state (using global variables)
-    
-    // Load background textures
-    blobs.forEach((blob, index) => {
-        const bgTexture = textureLoader.load(blob.backgroundTexture);
-        const bgMaterial = new THREE.MeshBasicMaterial({
-            map: bgTexture,
-            transparent: true,
-            opacity: index === 0 ? 1.0 : 0.0 // Only first background visible
-        });
-        
-        const bgPlane = new THREE.Mesh(backgroundGeometry, bgMaterial);
-        bgPlane.position.z = -15;
-        bgPlane.renderOrder = -5;
-        scene.add(bgPlane);
-        
-        backgroundPlanes.push(bgPlane);
-        backgroundMaterials.push(bgMaterial);
-    });
-    
-    // Video texture
-    const video = document.createElement('video');
-    video.src = './gh0st_loop.mp4';
-    video.loop = true;
-    video.muted = true;
-    video.autoplay = true;
-    video.playsInline = true;
-    
-    const videoTexture = new THREE.VideoTexture(video);
-    const videoMaterial = new THREE.MeshBasicMaterial({
-        map: videoTexture,
-        transparent: true,
-        opacity: 0.2
-    });
-    
-    videoPlane = new THREE.Mesh(videoGeometry, videoMaterial);
-    videoPlane.position.z = -12;
-    videoPlane.renderOrder = -3;
-    scene.add(videoPlane);
-    
-    video.play().catch(console.error);
-    
-    // Background switching with Zustand
+    // HTML Background switching function
     function switchBackground(backgroundIndex, duration = 0.5) {
-        const { setCurrentIndex } = carouselStore.getState();
-        
         if (backgroundIndex < 0 || backgroundIndex >= blobs.length) return;
-                
-        backgroundMaterials.forEach((material, index) => {
-            gsap.to(material, {
-                opacity: index === backgroundIndex ? 1.0 : 0.0,
-                duration: duration,
-                ease: 'power2.inOut'
-            });
+        
+        // Get all slide background elements
+        const slideBackgrounds = document.querySelectorAll('.slide-bg');
+        
+        // Hide all slides
+        slideBackgrounds.forEach((slide, index) => {
+            if (index === backgroundIndex) {
+                slide.classList.add('active');
+            } else {
+                slide.classList.remove('active');
+            }
         });
     }
     
@@ -612,6 +708,9 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
             // Copy position from orthographic camera
             perspectiveCamera.position.copy(orthographicCamera.position);
         }
+        
+        // Update render pass with new camera
+        renderPass.camera = camera;
     }
     
     // Enhanced keyboard navigation with camera switching
@@ -694,8 +793,10 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         
         if (textureMaterials[materialName]) {
             switchToTextureMaterial(materialName, transitionDuration);
-                } else {
         }
+        
+        // HTML backgrounds are handled by switchBackground function
+        // No need to update video here as it's handled by CSS
     }
     
 
@@ -783,7 +884,7 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         updateBlob(nextBlob, 0.8); // Slightly longer transition for blob navigation
     }
 
-    // Handle window resize for both cameras and backgrounds
+    // Handle window resize for both cameras
     window.addEventListener('resize', () => {
         const aspect = window.innerWidth / window.innerHeight;
         
@@ -799,18 +900,9 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         orthographicCamera.updateProjectionMatrix();
         
         renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight); // Update composer size
         
-        // Update background and video plane sizes responsively
-        const newSize = getResponsiveSize();
-        backgroundPlanes.forEach(plane => {
-            plane.geometry.dispose();
-            plane.geometry = new THREE.PlaneGeometry(newSize.width, newSize.height);
-        });
-        
-        if (videoPlane) {
-            videoPlane.geometry.dispose();
-            videoPlane.geometry = new THREE.PlaneGeometry(newSize.width * 1.2, newSize.height * 1.2);
-        }
+        // HTML backgrounds automatically resize with CSS
     });
 
 });
