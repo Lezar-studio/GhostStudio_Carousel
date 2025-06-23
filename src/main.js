@@ -65,7 +65,7 @@ const blobs = [
         backgroundTexture: './backgrounds/BG 1.png'
     },
     {
-        name: 'Crafting Artistic direction',
+        name: '& Web dev agency', 
         background: '#06E6FF',
         gradientEnd: '#FDFDFD',
         useGradient: true,
@@ -73,7 +73,7 @@ const blobs = [
         backgroundTexture: './backgrounds/BG 2.png'
     },
     {
-        name: '& Web dev agency',
+        name: 'Crafting Artistic direction',
         background: '#FF0000',
         useGradient: false,
         materialTexture: './materials/TGG3.png',
@@ -87,7 +87,7 @@ const blobs = [
         backgroundTexture: './backgrounds/BG 4.png'
     },
     {
-        name: 'And immersive websites',
+        name: '& immersive websites',
         background: '#000000',
         useGradient: false,
         materialTexture: './materials/TGG5.png',
@@ -414,7 +414,7 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         };
 
         // Scale and position the model (maintain natural proportions)
-        ghostModel.scale.setScalar(1.2); // Slightly larger to fill orthographic view better
+        ghostModel.scale.setScalar(0.7); // 50% smaller than original 1.2 scale
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
         scene.add(ghostModel);
@@ -725,17 +725,32 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         // Switch background (each blob gets its own background)
         switchBackground(nextIndex, 1.0); // 1 second transition
         
-        // Animate ghost model rotation - full 360 spin in correct direction
+        // Animate ghost model rotation - full 360 spin in opposite direction with curved motion
         if (ghostModel) {
             const currentRotation = ghostModel.rotation.y;
-            const spinDirection = direction > 0 ? 1 : -1; // 1 for forward, -1 for backward
+            const spinDirection = direction > 0 ? -1 : 1; // Reversed: -1 for forward, 1 for backward
             const targetRotation = currentRotation + (spinDirection * Math.PI * 2); // Full 360 degree spin
             
-            gsap.to(ghostModel.rotation, {
-                y: targetRotation,
-                duration: 1,
-                ease: 'power2.inOut'
-            });
+            // Add subtle curved motion during spin
+            const curveOffset = 0.02; // How far to move during curve
+            const curveDirection = spinDirection * curveOffset;
+            
+            gsap.timeline()
+                .to(ghostModel.rotation, {
+                    y: targetRotation,
+                    duration: 1,
+                    ease: 'power2.inOut'
+                })
+                .to(ghostModel.position, {
+                    x: curveDirection,
+                    duration: 0.5,
+                    ease: 'power2.out'
+                }, 0)
+                .to(ghostModel.position, {
+                    x: 0,
+                    duration: 0.5,
+                    ease: 'power2.in'
+                }, 0.5);
         }
         
         // Animate text
