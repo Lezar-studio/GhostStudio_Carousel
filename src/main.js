@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import textVertex from '../shaders/textVertex.glsl';
 import gsap from 'gsap';
 import { createStore } from 'zustand/vanilla';
@@ -121,21 +122,23 @@ const store = carouselStore.getState();
 store.setTotalBlobs(blobs.length);
 
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3)); // Higher pixel ratio for sharper edges
 renderer.setClearColor(0x000000, 0); // Transparent background
 renderer.shadowMap.enabled = true; // Enable shadows for better depth
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadows
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.9; // Increased for brighter reflective highlights
+renderer.toneMapping = THREE.LinearToneMapping; // Linear tone mapping for more control
+renderer.toneMappingExposure = 1.2; // Higher exposure for more dramatic effect
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-// Enhanced contrast post-processing shader
+// Blender-inspired high contrast post-processing shader
 const ContrastShader = {
     uniforms: {
         'tDiffuse': { value: null },
-        'contrast': { value: 1.5 }, // Increase contrast
-        'brightness': { value: 1.1 }, // Slightly reduce brightness
-        'saturation': { value: 1.1 } // Boost saturation
+                 'contrast': { value: 1.2 }, // Gentle contrast enhancement
+        'brightness': { value: 1.0 }, // Natural brightness
+        'saturation': { value: 1.3 }, // Subtle saturation boost
+        'gamma': { value: 1.0 }, // Standard gamma
+        'exposure': { value: 0.1 } // Slight exposure boost
     },
     vertexShader: `
         varying vec2 vUv;
@@ -149,22 +152,30 @@ const ContrastShader = {
         uniform float contrast;
         uniform float brightness;
         uniform float saturation;
+        uniform float gamma;
+        uniform float exposure;
         varying vec2 vUv;
         
         void main() {
             vec4 color = texture2D(tDiffuse, vUv);
             
-            // Apply brightness
-            color.rgb += brightness;
+            // Gentle exposure adjustment
+            color.rgb *= pow(2.0, exposure);
             
-            // Apply contrast
-            color.rgb = (color.rgb - 0.5) * contrast + 0.5;
+            // Subtle brightness adjustment
+            color.rgb *= brightness;
             
-            // Apply saturation
+            // Gentle contrast enhancement
+            color.rgb = mix(color.rgb, (color.rgb - 0.5) * contrast + 0.5, 0.8);
+            
+            // Subtle saturation boost
             float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
             color.rgb = mix(vec3(gray), color.rgb, saturation);
             
-            // Clamp values
+            // Gentle gamma correction
+            color.rgb = pow(max(color.rgb, vec3(0.001)), vec3(1.0 / gamma));
+            
+            // Clamp values to prevent artifacts
             color.rgb = clamp(color.rgb, 0.0, 1.0);
             
             gl_FragColor = color;
@@ -172,13 +183,20 @@ const ContrastShader = {
     `
 };
 
-// Set up post-processing
+// Set up post-processing with anti-aliasing
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 const contrastPass = new ShaderPass(ContrastShader);
 
+// Add FXAA anti-aliasing pass
+const fxaaPass = new ShaderPass(FXAAShader);
+const pixelRatio = renderer.getPixelRatio();
+fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+
 composer.addPass(renderPass);
 composer.addPass(contrastPass);
+composer.addPass(fxaaPass); // Add FXAA as final pass for smooth edges
 composer.setSize(window.innerWidth, window.innerHeight);
 
 // Global variables for the model and texture materials
@@ -187,32 +205,43 @@ let embeddedMaterials = {}; // Store original embedded materials from GLB
 let textureMaterials = {}; // Store PNG texture-based materials
 let currentMaterialIndex = 0;
 
-// Add additional lighting for better reflectivity and white edges
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white ambient light
+// Balanced lighting setup for clean metallic look
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); // Gentle ambient to reduce harsh shadows
 scene.add(ambientLight);
 
-// Key light from front-top for white edge highlights
-const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-keyLight.position.set(2, 3, 2);
+// Main key light with Blender-like rotation (57.6 degrees converted to radians)
+const keyLight = new THREE.DirectionalLight(0xffffff, 2); // Reduced intensity to prevent harsh spots
+const keyAngle = (57.6 * Math.PI) / 180; // Convert 57.6 degrees to radians
+keyLight.position.set(
+    Math.sin(keyAngle) * 5,
+    Math.cos(keyAngle) * 5,
+    3
+);
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.width = 2048;
+keyLight.shadow.mapSize.width = 2048; // Higher resolution shadows
 keyLight.shadow.mapSize.height = 2048;
-keyLight.shadow.camera.near = 0.5;
-keyLight.shadow.camera.far = 50;
-keyLight.shadow.camera.left = -10;
-keyLight.shadow.camera.right = 10;
-keyLight.shadow.camera.top = 10;
-keyLight.shadow.camera.bottom = -10;
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 100;
+keyLight.shadow.camera.left = -15;
+keyLight.shadow.camera.right = 15;
+keyLight.shadow.camera.top = 15;
+keyLight.shadow.camera.bottom = -15;
+keyLight.shadow.bias = -0.0001; // Reduce shadow acne
 scene.add(keyLight);
 
-// Rim light from behind for edge definition
-const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
-rimLight.position.set(-2, 1, -3);
+// Gentle rim light for metallic white edges
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.2);
+rimLight.position.set(-4, 2, -4);
 scene.add(rimLight);
 
-// Fill light from side for softer shadows
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-fillLight.position.set(-3, 0, 2);
+// Subtle edge light for highlights
+const edgeLight = new THREE.DirectionalLight(0xffffff, 0.2);
+edgeLight.position.set(3, -2, 4);
+scene.add(edgeLight);
+
+// Fill light with cooler tone for depth
+const fillLight = new THREE.DirectionalLight(0xaaccff, 0.2);
+fillLight.position.set(-2, -1, 2);
 scene.add(fillLight);
 
 // Load local HDRI for environment reflections
@@ -221,7 +250,7 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     texture.colorSpace = THREE.SRGBColorSpace;
     scene.environment = texture;
-    scene.environmentIntensity = 1.2; // Boost environment lighting
+    scene.environmentIntensity = 1.5; // Strong environment for metallic reflections
 
     // Load GLB model
     gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
@@ -237,15 +266,23 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         const loadPromises = blobs.map((blob, index) => {
             return new Promise((resolve) => {
                 textureLoader.load(blob.materialTexture, (texture) => {
-                    // Create reflective material with PNG texture for nice white edges
+                    // Fix texture orientation to match Blender
+                    texture.flipY = false; // Disable Y-flip to match Blender UV mapping
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    
+                    // Create proper metallic material without over-processing
                     const material = new THREE.MeshStandardMaterial({
                         map: texture,
                         transparent: true,
                         opacity: index === 0 ? 1.0 : 0.0, // First material visible, others hidden
                         side: THREE.DoubleSide,
-                        metalness: 0.3, // Add some metalness for reflectivity
-                        roughness: 0.4, // Lower roughness for sharper reflections
-                        envMapIntensity: 1.5 // Boost environment map reflection
+                        metalness: 0.5, // High metallic for reflective look
+                        roughness: 0.1, // Slightly higher roughness to reduce artifacts
+                        envMapIntensity: 2.0, // Strong environment reflections for metallic look
+                        transmission: 0.0, // Remove transmission to avoid spots
+                        clearcoat: 0.5, // Add clearcoat for shine
+                        clearcoatRoughness: 0.05 // Slightly rougher clearcoat to reduce artifacts
                     });
                     
                     // Reflective materials for white edge highlights
@@ -467,17 +504,107 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         }
     });
 
-    // Add contrast control functions
+    // Blender-style adjustment functions
     window.adjustContrast = function(value) {
         contrastPass.uniforms.contrast.value = value;
+        console.log(`Contrast set to ${value}`);
     };
     
     window.adjustBrightness = function(value) {
         contrastPass.uniforms.brightness.value = value;
+        console.log(`Brightness set to ${value}`);
     };
     
     window.adjustSaturation = function(value) {
         contrastPass.uniforms.saturation.value = value;
+        console.log(`Saturation set to ${value}`);
+    };
+    
+    window.adjustExposure = function(value) {
+        contrastPass.uniforms.exposure.value = value;
+        console.log(`Exposure set to ${value}`);
+    };
+    
+    window.adjustGamma = function(value) {
+        contrastPass.uniforms.gamma.value = value;
+        console.log(`Gamma set to ${value}`);
+    };
+    
+    // Material adjustment functions
+    window.adjustMetalness = function(value) {
+        Object.values(textureMaterials).forEach(material => {
+            material.metalness = value;
+        });
+        console.log(`Metalness set to ${value}`);
+    };
+    
+    window.adjustRoughness = function(value) {
+        Object.values(textureMaterials).forEach(material => {
+            material.roughness = value;
+        });
+        console.log(`Roughness set to ${value}`);
+    };
+    
+    window.adjustTransmission = function(value) {
+        Object.values(textureMaterials).forEach(material => {
+            material.transmission = value;
+        });
+        console.log(`Transmission set to ${value}`);
+    };
+    
+    // Environment intensity adjustment
+    window.adjustEnvironmentIntensity = function(value) {
+        scene.environmentIntensity = value;
+        console.log(`Environment intensity set to ${value}`);
+    };
+    
+    // Tone mapping adjustment
+    window.setToneMapping = function(type) {
+        const toneMappings = {
+            'linear': THREE.LinearToneMapping,
+            'reinhard': THREE.ReinhardToneMapping,
+            'aces': THREE.ACESFilmicToneMapping,
+            'cineon': THREE.CineonToneMapping,
+            'neutral': THREE.NeutralToneMapping
+        };
+        
+        if (toneMappings[type]) {
+            renderer.toneMapping = toneMappings[type];
+            console.log(`Tone mapping set to ${type}`);
+        } else {
+            console.log('Available tone mappings: linear, reinhard, aces, cineon, neutral');
+        }
+    };
+    
+    window.adjustToneMappingExposure = function(value) {
+        renderer.toneMappingExposure = value;
+        console.log(`Tone mapping exposure set to ${value}`);
+    };
+    
+    // Preset functions for quick adjustments
+        window.applyBlenderLook = function() {
+        // Apply clean metallic Blender-inspired settings
+        adjustContrast(1.2);
+        adjustSaturation(1.3);
+        adjustExposure(0.5);
+        adjustGamma(1.0);
+        adjustMetalness(0.5);
+        adjustRoughness(0.3);
+        adjustTransmission(0.0);
+        adjustEnvironmentIntensity(1.0);
+        console.log('Applied clean Blender-like look!');
+    };
+    
+    window.resetToDefault = function() {
+        adjustContrast(1.0);
+        adjustSaturation(1.0);
+        adjustExposure(0.3);
+        adjustGamma(1.0);
+        adjustMetalness(0.5);
+        adjustRoughness(0.5);
+        adjustTransmission(0.2);
+        adjustEnvironmentIntensity(.1);
+        console.log('Reset to default values');
     };
     
     // Add per-slide opacity control functions for HTML backgrounds
@@ -597,10 +724,10 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
 
     const clock = new THREE.Clock();
     
-    // Start animation loop immediately
+    // Start animation loop immediately using composer for post-processing
     function animate() {
         requestAnimationFrame(animate);
-        renderer.render(scene, camera);
+        composer.render(); // Use composer instead of renderer to apply our contrast shader!
     }
     animate();
 
@@ -901,6 +1028,11 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         
         renderer.setSize(window.innerWidth, window.innerHeight);
         composer.setSize(window.innerWidth, window.innerHeight); // Update composer size
+        
+        // Update FXAA resolution on resize
+        const pixelRatio = renderer.getPixelRatio();
+        fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+        fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
         
         // HTML backgrounds automatically resize with CSS
     });
