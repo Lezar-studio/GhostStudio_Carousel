@@ -134,11 +134,11 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const ContrastShader = {
     uniforms: {
         'tDiffuse': { value: null },
-                 'contrast': { value: 1.2 }, // Gentle contrast enhancement
-        'brightness': { value: 1.0 }, // Natural brightness
+                 'contrast': { value: 1.1 }, // Gentle contrast enhancement
+        'brightness': { value: 1.1 }, // Natural brightness
         'saturation': { value: 1.3 }, // Subtle saturation boost
         'gamma': { value: 1.0 }, // Standard gamma
-        'exposure': { value: 0.1 } // Slight exposure boost
+        'exposure': { value: 0.2 } // Slight exposure boost
     },
     vertexShader: `
         varying vec2 vUv;
@@ -206,11 +206,11 @@ let textureMaterials = {}; // Store PNG texture-based materials
 let currentMaterialIndex = 0;
 
 // Balanced lighting setup for clean metallic look
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); // Gentle ambient to reduce harsh shadows
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Gentle ambient to reduce harsh shadows
 scene.add(ambientLight);
 
 // Main key light with Blender-like rotation (57.6 degrees converted to radians)
-const keyLight = new THREE.DirectionalLight(0xffffff, 2); // Reduced intensity to prevent harsh spots
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.2); // Reduced intensity to prevent harsh spots
 const keyAngle = (57.6 * Math.PI) / 180; // Convert 57.6 degrees to radians
 keyLight.position.set(
     Math.sin(keyAngle) * 5,
@@ -218,8 +218,8 @@ keyLight.position.set(
     3
 );
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.width = 2048; // Higher resolution shadows
-keyLight.shadow.mapSize.height = 2048;
+keyLight.shadow.mapSize.width = 1024; // Higher resolution shadows
+keyLight.shadow.mapSize.height = 1024;
 keyLight.shadow.camera.near = 0.1;
 keyLight.shadow.camera.far = 100;
 keyLight.shadow.camera.left = -15;
@@ -279,8 +279,8 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
                         side: THREE.DoubleSide,
                         metalness: 0.5, // High metallic for reflective look
                         roughness: 0.1, // Slightly higher roughness to reduce artifacts
-                        envMapIntensity: 2.0, // Strong environment reflections for metallic look
-                        transmission: 0.0, // Remove transmission to avoid spots
+                        envMapIntensity: 0.5, // Strong environment reflections for metallic look
+                        transmission: 0.1, // 
                         clearcoat: 0.5, // Add clearcoat for shine
                         clearcoatRoughness: 0.05 // Slightly rougher clearcoat to reduce artifacts
                     });
