@@ -691,6 +691,12 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         ghostModel.scale.setScalar(0.6); // 50% smaller than original 1.2 scale
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
+        // Initialize base Y position for hover animation
+        ghostModel.userData.baseY = 0;
+        
+        // Add subtle idle rotation for more life
+        ghostModel.userData.idleRotation = 0;
+        
         scene.add(ghostModel);
     });
 
@@ -724,9 +730,35 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
 
     const clock = new THREE.Clock();
     
+    // Variables for hover animation
+    let hoverOffset = 0;
+    const hoverAmplitude = 0.15; // How much to move up/down
+    const hoverSpeed = 0.4; // Speed of hover animation
+    
     // Start animation loop immediately using composer for post-processing
     function animate() {
         requestAnimationFrame(animate);
+        
+        const elapsedTime = clock.getElapsedTime();
+        
+        // Continuous sine wave hover animation for ghost model
+        if (ghostModel) {
+            // Calculate hover offset using sine wave
+            hoverOffset = Math.sin(elapsedTime * hoverSpeed) * hoverAmplitude;
+            
+            // Apply hover to Y position (independent of other animations)
+            // Store base Y position if not set
+            if (ghostModel.userData.baseY === undefined) {
+                ghostModel.userData.baseY = ghostModel.position.y;
+            }
+            
+            // Update Y position with hover effect
+            ghostModel.position.y = ghostModel.userData.baseY + hoverOffset;
+            
+            // Optional: Add subtle rotation on hover for more life
+            ghostModel.rotation.z = Math.sin(elapsedTime * hoverSpeed * 0.5) * 0.08; // Subtle tilt
+        }
+        
         composer.render(); // Use composer instead of renderer to apply our contrast shader!
     }
     animate();
@@ -987,32 +1019,43 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         // Switch background (each blob gets its own background)
         switchBackground(nextIndex, 1.0); // 1 second transition
         
-        // Animate ghost model rotation - full 360 spin in opposite direction with curved motion
+        // Animate ghost model rotation - smooth 360 spin with natural motion
         if (ghostModel) {
-            const currentRotation = ghostModel.rotation.y;
+            // Normalize current rotation to prevent accumulation issues
+            const normalizedRotation = ghostModel.rotation.y % (Math.PI * 2);
+            ghostModel.rotation.y = normalizedRotation;
+            
             const spinDirection = direction > 0 ? -1 : 1; // Reversed: -1 for forward, 1 for backward
-            const targetRotation = currentRotation + (spinDirection * Math.PI * 2); // Full 360 degree spin
+            const targetRotation = normalizedRotation + (spinDirection * Math.PI * 2); // Full 360 degree spin
             
-            // Add subtle curved motion during spin
-            const curveOffset = 0.02; // How far to move during curve
-            const curveDirection = spinDirection * curveOffset;
+            // Store base Y position for hover animation continuity
+            const currentBaseY = ghostModel.userData.baseY || 0;
             
+            // Single smooth rotation with natural easing
+            gsap.to(ghostModel.rotation, {
+                y: targetRotation,
+                duration: 1.2, // Slightly longer for smoother motion
+                ease: 'power3.inOut', // Smoother easing curve
+                onUpdate: function() {
+                    // Add subtle organic motion during spin
+                    const progress = this.progress();
+                    const wobble = Math.sin(progress * Math.PI) * 0.015;
+                    ghostModel.position.x = wobble * spinDirection;
+                }
+            });
+            
+            // Gentle lift during spin for natural feel
             gsap.timeline()
-                .to(ghostModel.rotation, {
-                    y: targetRotation,
-                    duration: 1,
-                    ease: 'power2.inOut'
-                })
-                .to(ghostModel.position, {
-                    x: curveDirection,
-                    duration: 0.5,
+                .to(ghostModel.userData, {
+                    baseY: currentBaseY + 0.05, // Gentler lift
+                    duration: 0.4,
                     ease: 'power2.out'
-                }, 0)
-                .to(ghostModel.position, {
-                    x: 0,
-                    duration: 0.5,
-                    ease: 'power2.in'
-                }, 0.5);
+                })
+                .to(ghostModel.userData, {
+                    baseY: currentBaseY,
+                    duration: 0.8,
+                    ease: 'power2.inOut' // Smoother return
+                });
         }
         
         // Responsive animation distances
