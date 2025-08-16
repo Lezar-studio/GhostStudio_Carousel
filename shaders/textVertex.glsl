@@ -14,7 +14,12 @@ void main() {
 
     float rotateAngle = -direction * pow(sin(progress * PI), 1.5) * PI * 2.;
 
-    float twirlAngle = -sin(uv.x - .5) * pow(twirlPeriod, 2.0) * -4.;
+    // Adjusted twirl for better multi-line support
+    // Use both X and Y coordinates for more uniform effect across wrapped lines
+    float xFactor = sin(uv.x - .5);
+    float yFactor = 1.0 - abs(uv.y - 0.5) * 0.5; // Reduce effect at top/bottom of multi-line text
+    
+    float twirlAngle = -xFactor * yFactor * pow(twirlPeriod, 2.0) * -4.;
 
     float twirlRotate = rotateAngle + twirlAngle;
 

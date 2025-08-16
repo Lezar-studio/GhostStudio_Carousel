@@ -741,17 +741,51 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         }
     });
     
+    // Responsive text configuration
+    function getResponsiveTextSettings() {
+        const width = window.innerWidth;
+        const isMobile = width <= 768;
+        const isTablet = width > 768 && width <= 1024;
+        
+        let fontSize, maxWidth, lineHeight, yPosition;
+        
+        if (isMobile) {
+            fontSize = 0.3; // Bigger font for mobile (was 0.25)
+            maxWidth = 2.1; // Slightly wider to reduce unnecessary wrapping
+            lineHeight = 1.2;
+            yPosition = -0.2; // Lower position on mobile to see 3D model better
+        } else if (isTablet) {
+            fontSize = 0.35;
+            maxWidth = 4.0; // Wider to prevent wrapping
+            lineHeight = 1.2;
+            yPosition = 0; // Default position
+        } else {
+            fontSize = 0.4; // Original desktop size
+            maxWidth = 6.0; // Much wider to ensure single line on desktop
+            lineHeight = 1.2;
+            yPosition = 0; // Default position
+        }
+        
+        return { fontSize, maxWidth, lineHeight, yPosition };
+    }
+    
     const texts = blobs.map((blob, index) =>{
+      const settings = getResponsiveTextSettings();
       const myText =  new Text();
       myText.text = blob.name;
       myText.font = `./TT Norms Pro DemiBold.ttf`;
       myText.anchorX = 'center';
       myText.anchorY = 'middle';
       myText.material = textMaterial;
-      myText.position.set(0,0,2);
+      myText.position.set(0, settings.yPosition, 2); // Use responsive Y position
       if(index !== 0) myText.scale.set(0,0,0);
       myText.letterSpacing = -0.08;
-      myText.fontSize = 0.4; // Fixed size for orthographic camera
+      myText.fontSize = settings.fontSize;
+      myText.maxWidth = settings.maxWidth; // Enable text wrapping only when needed
+      myText.lineHeight = settings.lineHeight;
+      myText.textAlign = 'center'; // Center align for wrapped text
+      myText.whiteSpace = 'normal'; // Allow text wrapping
+      myText.overflowWrap = 'normal'; // Don't break words unnecessarily
       myText.glyphGeometryDetail = 20;
       myText.sync();
       scene.add(myText);
@@ -981,9 +1015,14 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
                 }, 0.5);
         }
         
+        // Responsive animation distances
+        const isMobile = window.innerWidth <= 768;
+        const startOffset = isMobile ? 4 : 6; // Smaller offset on mobile
+        const exitOffset = isMobile ? 5 : 8; // Smaller exit distance on mobile
+        
         // Animate text
         texts[nextIndex].scale.set(1,1,1);
-        texts[nextIndex].position.x = direction * 6; // Moved further to the sides
+        texts[nextIndex].position.x = direction * startOffset;
 
         gsap.to(textMaterial.uniforms.progress, {
             value: .5,
@@ -996,13 +1035,17 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
 
         // Animate from the PREVIOUS index, not the current (which is now next)
         gsap.to(texts[previousIndex].position, {
-            x: -direction * 8, // Moved further to the sides
+            x: -direction * exitOffset,
             duration: 1,
             ease: 'power2.inOut'
         });
 
+        // Get responsive Y position for animation
+        const settings = getResponsiveTextSettings();
+        
         gsap.to(texts[nextIndex].position, {
             x: 0,
+            y: settings.yPosition, // Animate to responsive Y position
             duration: 1,
             ease: 'power2.inOut',
         });
@@ -1033,6 +1076,19 @@ textureLoader2.load('./env/HDRI.png', function(texture) {
         const pixelRatio = renderer.getPixelRatio();
         fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
         fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+        
+        // Update text sizes and positions on resize
+        const settings = getResponsiveTextSettings();
+        texts.forEach((text, index) => {
+            text.fontSize = settings.fontSize;
+            text.maxWidth = settings.maxWidth;
+            text.lineHeight = settings.lineHeight;
+            // Update Y position based on current visibility
+            if (text.scale.x > 0) { // Only update position for visible text
+                text.position.y = settings.yPosition;
+            }
+            text.sync(); // Re-sync text with new settings
+        });
         
         // HTML backgrounds automatically resize with CSS
     });
