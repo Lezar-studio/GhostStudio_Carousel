@@ -275,9 +275,55 @@ nav div {
         right: 2vh;
     }
     
+    .btn-connect {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+    
     .nav-hint {
         bottom: 10vh;
         font-size: 0.7rem;
+    }
+    
+    /* Ensure canvas stays visible on mobile */
+    #canvas {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+    }
+    
+    /* Adjust background for mobile viewport */
+    .background-container {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+    }
+}
+
+/* Additional mobile optimizations for very small screens */
+@media (max-width: 480px) {
+    .bottom svg,
+    .top svg {
+        height: 30px;
+    }
+    
+    .progress-bar {
+        width: 25vw;
+    }
+    
+    /* Touch-friendly tap targets */
+    a {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* Tablet specific adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+    #canvas {
+        width: 100vw;
+        height: 100vh;
     }
 }
   

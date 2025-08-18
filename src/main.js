@@ -2,6 +2,10 @@ import "./style.css";
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader';
 import textVertex from '../shaders/textVertex.glsl';
 import gsap from 'gsap';
 import { createStore } from 'zustand/vanilla';
@@ -109,7 +113,8 @@ let camera = orthographicCamera;
 
 const renderer = new THREE.WebGLRenderer({
     canvas: document.querySelector('#canvas'),
-    antialias: true
+    antialias: true,
+    alpha: false // Keep opaque canvas for HTML backgrounds
 });
 
 // Initialize store
@@ -122,6 +127,79 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2; // Increased for more vibrant colors
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+// Enable shadows
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// Blender-inspired high contrast post-processing shader
+const ContrastShader = {
+    uniforms: {
+        'tDiffuse': { value: null },
+        'contrast': { value: 1.1 }, // Gentle contrast enhancement
+        'brightness': { value: 1.1 }, // Natural brightness
+        'saturation': { value: 1.3 }, // Subtle saturation boost
+        'gamma': { value: 1.0 }, // Standard gamma
+        'exposure': { value: 0.2 } // Slight exposure boost
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float contrast;
+        uniform float brightness;
+        uniform float saturation;
+        uniform float gamma;
+        uniform float exposure;
+        varying vec2 vUv;
+        
+        void main() {
+            vec4 color = texture2D(tDiffuse, vUv);
+            
+            // Gentle exposure adjustment
+            color.rgb *= pow(2.0, exposure);
+            
+            // Subtle brightness adjustment
+            color.rgb *= brightness;
+            
+            // Gentle contrast enhancement
+            color.rgb = mix(color.rgb, (color.rgb - 0.5) * contrast + 0.5, 0.8);
+            
+            // Subtle saturation boost
+            float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+            color.rgb = mix(vec3(gray), color.rgb, saturation);
+            
+            // Gentle gamma correction
+            color.rgb = pow(max(color.rgb, vec3(0.001)), vec3(1.0 / gamma));
+            
+            // Clamp values to prevent artifacts
+            color.rgb = clamp(color.rgb, 0.0, 1.0);
+            
+            gl_FragColor = color;
+        }
+    `
+};
+
+// Set up post-processing with anti-aliasing
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+const contrastPass = new ShaderPass(ContrastShader);
+
+// Add FXAA anti-aliasing pass
+const fxaaPass = new ShaderPass(FXAAShader);
+const pixelRatio = renderer.getPixelRatio();
+fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+
+composer.addPass(renderPass);
+composer.addPass(contrastPass);
+composer.addPass(fxaaPass); // Add FXAA as final pass for smooth edges
+composer.setSize(window.innerWidth, window.innerHeight);
+
 // Global variables for the model and texture materials
 let ghostModel = null;
 let embeddedMaterials = {}; // Store original embedded materials from GLB
@@ -131,7 +209,46 @@ let backgroundPlanes = [];
 let backgroundMaterials = [];
 let videoPlane = null;
 
-// Load HDRI - Using studio_small_09 for better contrast and vibrant colors
+// Balanced lighting setup for clean metallic look
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Gentle ambient to reduce harsh shadows
+scene.add(ambientLight);
+
+// Main key light with Blender-like rotation (57.6 degrees converted to radians)
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.2); // Reduced intensity to prevent harsh spots
+const keyAngle = (57.6 * Math.PI) / 180; // Convert 57.6 degrees to radians
+keyLight.position.set(
+    Math.sin(keyAngle) * 5,
+    Math.cos(keyAngle) * 5,
+    3
+);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 1024; // Higher resolution shadows
+keyLight.shadow.mapSize.height = 1024;
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 100;
+keyLight.shadow.camera.left = -15;
+keyLight.shadow.camera.right = 15;
+keyLight.shadow.camera.top = 15;
+keyLight.shadow.camera.bottom = -15;
+keyLight.shadow.bias = -0.0001; // Reduce shadow acne
+scene.add(keyLight);
+
+// Gentle rim light for metallic white edges
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.2);
+rimLight.position.set(-4, 2, -4);
+scene.add(rimLight);
+
+// Subtle edge light for highlights
+const edgeLight = new THREE.DirectionalLight(0xffffff, 0.2);
+edgeLight.position.set(3, -2, 4);
+scene.add(edgeLight);
+
+// Fill light with cooler tone for depth
+const fillLight = new THREE.DirectionalLight(0xaaccff, 0.2);
+fillLight.position.set(-2, -1, 2);
+scene.add(fillLight);
+
+// Load HDRI for environment reflections
 const rgbeLoader = new RGBELoader(loadingManager);
 rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr', function(texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -147,19 +264,23 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         console.log('=== LOADING CLEAN TEXTURE MATERIALS ===');
         console.log(`📦 Loading ${blobs.length} blob configurations with backgrounds and materials`);
         
-        // Load PNG textures and create materials
+        // Load PNG textures and create materials with enhanced properties
         const loadPromises = blobs.map((blob, index) => {
             return new Promise((resolve) => {
                 textureLoader.load(blob.materialTexture, (texture) => {
-                    // Create simple material with PNG texture only (no metallic modifications)
+                    // Create enhanced material with metallic properties
                     const material = new THREE.MeshStandardMaterial({
                         map: texture,
                         transparent: true,
                         opacity: index === 0 ? 1.0 : 0.0, // First material visible, others hidden
-                        side: THREE.DoubleSide
+                        side: THREE.DoubleSide,
+                        metalness: 0.5, // High metallic for reflective look
+                        roughness: 0.1, // Slightly higher roughness to reduce artifacts
+                        envMapIntensity: 0.5, // Strong environment reflections for metallic look
+                        transmission: 0.1,
+                        clearcoat: 0.5, // Add clearcoat for shine
+                        clearcoatRoughness: 0.05 // Slightly rougher clearcoat to reduce artifacts
                     });
-                    
-                    // Keep materials pure - no metalness, roughness, or other modifications
                     
                     textureMaterials[`TGG${index + 1}`] = material;
                     resolve();
@@ -169,7 +290,12 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
                         color: '#ffffff', // Default white fallback
                         transparent: true,
                         opacity: index === 0 ? 1.0 : 0.0,
-                        side: THREE.DoubleSide
+                        side: THREE.DoubleSide,
+                        metalness: 0.5,
+                        roughness: 0.1,
+                        envMapIntensity: 0.5,
+                        clearcoat: 0.5,
+                        clearcoatRoughness: 0.05
                     });
                     textureMaterials[`TGG${index + 1}`] = fallbackMaterial;
                     resolve();
@@ -417,6 +543,12 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         ghostModel.scale.setScalar(1.2); // Slightly larger to fill orthographic view better
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
+        // Initialize base Y position for hover animation
+        ghostModel.userData.baseY = 0;
+        
+        // Add subtle idle rotation for more life
+        ghostModel.userData.idleRotation = 0;
+        
         scene.add(ghostModel);
     });
 
@@ -501,10 +633,38 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
 
     const clock = new THREE.Clock();
     
-    // Start animation loop immediately
+    // Variables for hover animation
+    let hoverOffset = 0;
+    const hoverAmplitude = 0.15; // How much to move up/down
+    const hoverSpeed = 0.4; // Speed of hover animation
+    
+    // Start animation loop immediately using composer for post-processing
     function animate() {
         requestAnimationFrame(animate);
-        renderer.render(scene, camera);
+        
+        const elapsedTime = clock.getElapsedTime();
+        
+        // Continuous sine wave hover animation for ghost model
+        if (ghostModel) {
+            // Calculate hover offset using sine wave
+            hoverOffset = Math.sin(elapsedTime * hoverSpeed) * hoverAmplitude;
+            
+            // Apply hover to Y position (independent of other animations)
+            // Store base Y position if not set
+            if (ghostModel.userData.baseY === undefined) {
+                ghostModel.userData.baseY = ghostModel.position.y;
+            }
+            
+            // Update Y position with hover effect
+            ghostModel.position.y = ghostModel.userData.baseY + hoverOffset;
+            
+            // Optional: Add subtle rotation on hover for more life
+            ghostModel.rotation.z = Math.sin(elapsedTime * hoverSpeed * 0.5) * 0.08; // Subtle tilt
+        }
+        
+        // Update render pass camera before rendering
+        renderPass.camera = camera;
+        composer.render(); // Use composer instead of renderer to apply our contrast shader!
     }
     animate();
 
@@ -518,17 +678,51 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         }
     });
     
+    // Responsive text configuration
+    function getResponsiveTextSettings() {
+        const width = window.innerWidth;
+        const isMobile = width <= 768;
+        const isTablet = width > 768 && width <= 1024;
+        
+        let fontSize, maxWidth, lineHeight, yPosition;
+        
+        if (isMobile) {
+            fontSize = 0.3; // Bigger font for mobile (was 0.25)
+            maxWidth = 2.1; // Slightly wider to reduce unnecessary wrapping
+            lineHeight = 1.2;
+            yPosition = -0.2; // Lower position on mobile to see 3D model better
+        } else if (isTablet) {
+            fontSize = 0.35;
+            maxWidth = 4.0; // Wider to prevent wrapping
+            lineHeight = 1.2;
+            yPosition = 0; // Default position
+        } else {
+            fontSize = 0.4; // Original desktop size
+            maxWidth = 6.0; // Much wider to ensure single line on desktop
+            lineHeight = 1.2;
+            yPosition = 0; // Default position
+        }
+        
+        return { fontSize, maxWidth, lineHeight, yPosition };
+    }
+    
     const texts = blobs.map((blob, index) =>{
+      const settings = getResponsiveTextSettings();
       const myText =  new Text();
       myText.text = blob.name;
       myText.font = `./TT Norms Pro DemiBold.ttf`;
       myText.anchorX = 'center';
       myText.anchorY = 'middle';
       myText.material = textMaterial;
-      myText.position.set(0,0,2);
+      myText.position.set(0, settings.yPosition, 2); // Use responsive Y position
       if(index !== 0) myText.scale.set(0,0,0);
       myText.letterSpacing = -0.08;
-      myText.fontSize = 0.4; // Fixed size for orthographic camera
+      myText.fontSize = settings.fontSize;
+      myText.maxWidth = settings.maxWidth; // Enable text wrapping only when needed
+      myText.lineHeight = settings.lineHeight;
+      myText.textAlign = 'center'; // Center align for wrapped text
+      myText.whiteSpace = 'normal'; // Allow text wrapping
+      myText.overflowWrap = 'normal'; // Don't break words unnecessarily
       myText.glyphGeometryDetail = 20;
       myText.sync();
       scene.add(myText);
@@ -570,7 +764,7 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         // Set animation complete callback
         setTimeout(() => {
             setIsAnimating(false);
-        }, 1000); // Match animation duration
+        }, 1200); // Match animation duration (increased for smoother motion)
     }
     
     // Enhanced wheel event handler for better trackpad support
@@ -725,22 +919,53 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         // Switch background (each blob gets its own background)
         switchBackground(nextIndex, 1.0); // 1 second transition
         
-        // Animate ghost model rotation - full 360 spin in correct direction
+        // Animate ghost model rotation - smooth 360 spin with natural motion
         if (ghostModel) {
-            const currentRotation = ghostModel.rotation.y;
-            const spinDirection = direction > 0 ? 1 : -1; // 1 for forward, -1 for backward
-            const targetRotation = currentRotation + (spinDirection * Math.PI * 2); // Full 360 degree spin
+            // Normalize current rotation to prevent accumulation issues
+            const normalizedRotation = ghostModel.rotation.y % (Math.PI * 2);
+            ghostModel.rotation.y = normalizedRotation;
             
+            const spinDirection = direction > 0 ? -1 : 1; // Reversed: -1 for forward, 1 for backward
+            const targetRotation = normalizedRotation + (spinDirection * Math.PI * 2); // Full 360 degree spin
+            
+            // Store base Y position for hover animation continuity
+            const currentBaseY = ghostModel.userData.baseY || 0;
+            
+            // Single smooth rotation with natural easing
             gsap.to(ghostModel.rotation, {
                 y: targetRotation,
-                duration: 1,
-                ease: 'power2.inOut'
+                duration: 1.2, // Slightly longer for smoother motion
+                ease: 'power3.inOut', // Smoother easing curve
+                onUpdate: function() {
+                    // Add subtle organic motion during spin
+                    const progress = this.progress();
+                    const wobble = Math.sin(progress * Math.PI) * 0.015;
+                    ghostModel.position.x = wobble * spinDirection;
+                }
             });
+            
+            // Gentle lift during spin for natural feel
+            gsap.timeline()
+                .to(ghostModel.userData, {
+                    baseY: currentBaseY + 0.05, // Gentler lift
+                    duration: 0.4,
+                    ease: 'power2.out'
+                })
+                .to(ghostModel.userData, {
+                    baseY: currentBaseY,
+                    duration: 0.8,
+                    ease: 'power2.inOut' // Smoother return
+                });
         }
+        
+        // Responsive animation distances
+        const isMobile = window.innerWidth <= 768;
+        const startOffset = isMobile ? 4 : 6; // Smaller offset on mobile
+        const exitOffset = isMobile ? 5 : 8; // Smaller exit distance on mobile
         
         // Animate text
         texts[nextIndex].scale.set(1,1,1);
-        texts[nextIndex].position.x = direction * 6; // Moved further to the sides
+        texts[nextIndex].position.x = direction * startOffset;
 
         gsap.to(textMaterial.uniforms.progress, {
             value: .5,
@@ -753,13 +978,17 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
 
         // Animate from the PREVIOUS index, not the current (which is now next)
         gsap.to(texts[previousIndex].position, {
-            x: -direction * 8, // Moved further to the sides
+            x: -direction * exitOffset,
             duration: 1,
             ease: 'power2.inOut'
         });
 
+        // Get responsive Y position for animation
+        const settings = getResponsiveTextSettings();
+        
         gsap.to(texts[nextIndex].position, {
             x: 0,
+            y: settings.yPosition, // Animate to responsive Y position
             duration: 1,
             ease: 'power2.inOut',
         });
@@ -785,6 +1014,12 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         
         renderer.setSize(window.innerWidth, window.innerHeight);
         
+        // Update composer and FXAA pass
+        composer.setSize(window.innerWidth, window.innerHeight);
+        const pixelRatio = renderer.getPixelRatio();
+        fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+        fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+        
         // Update background and video plane sizes responsively
         const newSize = getResponsiveSize();
         backgroundPlanes.forEach(plane => {
@@ -796,6 +1031,19 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
             videoPlane.geometry.dispose();
             videoPlane.geometry = new THREE.PlaneGeometry(newSize.width * 1.2, newSize.height * 1.2);
         }
+        
+        // Update text sizes and positions on resize
+        const settings = getResponsiveTextSettings();
+        texts.forEach((text, index) => {
+            text.fontSize = settings.fontSize;
+            text.maxWidth = settings.maxWidth;
+            text.lineHeight = settings.lineHeight;
+            // Update Y position based on current visibility
+            if (text.scale.x > 0) { // Only update position for visible text
+                text.position.y = settings.yPosition;
+            }
+            text.sync(); // Re-sync text with new settings
+        });
     });
 
 });
