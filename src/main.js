@@ -1,6 +1,5 @@
 import "./style.css";
 import * as THREE from 'three';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
@@ -248,99 +247,111 @@ const fillLight = new THREE.DirectionalLight(0xaaccff, 0.2);
 fillLight.position.set(-2, -1, 2);
 scene.add(fillLight);
 
-// Load HDRI for environment reflections
-const rgbeLoader = new RGBELoader(loadingManager);
-rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr', function(texture) {
-    texture.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = texture;
+// Create a neutral studio environment for reflections (matching updated-shadows approach)
+// Since we don't have the local HDRI.png, we'll create a similar studio lighting environment
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
 
-    // Load GLB model
-    gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
-        ghostModel = gltf.scene;
+// Create a simple studio environment with white/light gray tones
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0xf0f0f0);
+const envLight1 = new THREE.DirectionalLight(0xffffff, 1);
+envLight1.position.set(1, 1, 1);
+envScene.add(envLight1);
+const envLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+envLight2.position.set(-1, -1, -1);
+envScene.add(envLight2);
 
-        // Store embedded materials from GLB file and create PNG texture materials
-        console.log('=== WELCOME TO GHOST STUDIO! ===');
-        console.log('-- CHECK OUR SITE NOT THE CONSOLE LOGS! :)');
-        console.log('=== LOADING CLEAN TEXTURE MATERIALS ===');
-        console.log(`📦 Loading ${blobs.length} blob configurations with backgrounds and materials`);
-        
-        // Load PNG textures and create materials with enhanced properties
-        const loadPromises = blobs.map((blob, index) => {
-            return new Promise((resolve) => {
-                textureLoader.load(blob.materialTexture, (texture) => {
-                    // Create enhanced material with metallic properties
-                    const material = new THREE.MeshStandardMaterial({
-                        map: texture,
-                        transparent: true,
-                        opacity: index === 0 ? 1.0 : 0.0, // First material visible, others hidden
-                        side: THREE.DoubleSide,
-                        metalness: 0.5, // High metallic for reflective look
-                        roughness: 0.1, // Slightly higher roughness to reduce artifacts
-                        envMapIntensity: 0.5, // Strong environment reflections for metallic look
-                        transmission: 0.1,
-                        clearcoat: 0.5, // Add clearcoat for shine
-                        clearcoatRoughness: 0.05 // Slightly rougher clearcoat to reduce artifacts
-                    });
-                    
-                    textureMaterials[`TGG${index + 1}`] = material;
-                    resolve();
-                }, undefined, (error) => {
-                    // Create simple fallback material without texture
-                    const fallbackMaterial = new THREE.MeshStandardMaterial({
-                        color: '#ffffff', // Default white fallback
-                        transparent: true,
-                        opacity: index === 0 ? 1.0 : 0.0,
-                        side: THREE.DoubleSide,
-                        metalness: 0.5,
-                        roughness: 0.1,
-                        envMapIntensity: 0.5,
-                        clearcoat: 0.5,
-                        clearcoatRoughness: 0.05
-                    });
-                    textureMaterials[`TGG${index + 1}`] = fallbackMaterial;
-                    resolve();
+const renderTarget = pmremGenerator.fromScene(envScene);
+scene.environment = renderTarget.texture;
+
+// Load GLB model after environment is set
+gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
+    ghostModel = gltf.scene;
+
+    // Store embedded materials from GLB file and create PNG texture materials
+    console.log('=== WELCOME TO GHOST STUDIO! ===');
+    console.log('-- CHECK OUR SITE NOT THE CONSOLE LOGS! :)');
+    console.log('=== LOADING CLEAN TEXTURE MATERIALS ===');
+    console.log(`📦 Loading ${blobs.length} blob configurations with backgrounds and materials`);
+    
+    // Load PNG textures and create materials with enhanced properties
+    const loadPromises = blobs.map((blob, index) => {
+        return new Promise((resolve) => {
+            textureLoader.load(blob.materialTexture, (texture) => {
+                // Create enhanced material with metallic properties
+                const material = new THREE.MeshStandardMaterial({
+                    map: texture,
+                    transparent: true,
+                    opacity: index === 0 ? 1.0 : 0.0, // First material visible, others hidden
+                    side: THREE.DoubleSide,
+                    metalness: 0.5, // High metallic for reflective look
+                    roughness: 0.1, // Slightly higher roughness to reduce artifacts
+                    envMapIntensity: 0.5, // Strong environment reflections for metallic look
+                    transmission: 0.1,
+                    clearcoat: 0.5, // Add clearcoat for shine
+                    clearcoatRoughness: 0.05 // Slightly rougher clearcoat to reduce artifacts
                 });
+                
+                textureMaterials[`TGG${index + 1}`] = material;
+                resolve();
+            }, undefined, (error) => {
+                // Create simple fallback material without texture
+                const fallbackMaterial = new THREE.MeshStandardMaterial({
+                    color: '#ffffff', // Default white fallback
+                    transparent: true,
+                    opacity: index === 0 ? 1.0 : 0.0,
+                    side: THREE.DoubleSide,
+                    metalness: 0.5,
+                    roughness: 0.1,
+                    envMapIntensity: 0.5,
+                    clearcoat: 0.5,
+                    clearcoatRoughness: 0.05
+                });
+                textureMaterials[`TGG${index + 1}`] = fallbackMaterial;
+                resolve();
             });
         });
+    });
+    
+    // Wait for all textures to load, then apply materials
+    Promise.all(loadPromises).then(() => {
         
-        // Wait for all textures to load, then apply materials
-        Promise.all(loadPromises).then(() => {
-            
-            // Apply texture materials to ghost body (preserve eyes)
-            ghostModel.traverse((child) => {
-                if (child.isMesh) {
-                    if (Array.isArray(child.material)) {
-                        child.material = child.material.map(mat => {
-                            if (mat.name.toLowerCase().includes('eye') || mat.name === '1 eyes') {
-                                // Preserve original eyes material
-                                embeddedMaterials[mat.name] = mat.clone();
-                                return mat;
-                            } else {
-                                // Replace body materials with texture materials
-                                return textureMaterials['TGG1']; // Start with first texture
-                            }
-                        });
-                    } else {
-                        if (child.material.name.toLowerCase().includes('eye') || child.material.name === '1 eyes') {
-                            // Preserve original eyes material
-                            embeddedMaterials[child.material.name] = child.material.clone();
-                        } else {
-                            // Replace body material with texture material
-                            child.material = textureMaterials['TGG1']; // Start with first texture
-                        }
-                    }
-                }
-            });
-        });
-
-        
-        // Set up material traversal for shadows
+        // Apply texture materials to ghost body (preserve eyes)
         ghostModel.traverse((child) => {
             if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map(mat => {
+                        if (mat.name.toLowerCase().includes('eye') || mat.name === '1 eyes') {
+                            // Preserve original eyes material
+                            embeddedMaterials[mat.name] = mat.clone();
+                            return mat;
+                        } else {
+                            // Replace body materials with texture materials
+                            return textureMaterials['TGG1']; // Start with first texture
+                        }
+                    });
+                } else {
+                    if (child.material.name.toLowerCase().includes('eye') || child.material.name === '1 eyes') {
+                        // Preserve original eyes material
+                        embeddedMaterials[child.material.name] = child.material.clone();
+                    } else {
+                        // Replace body material with texture material
+                        child.material = textureMaterials['TGG1']; // Start with first texture
+                    }
+                }
             }
         });
+    });
+
+    
+    // Set up material traversal for shadows
+    ghostModel.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
         
         // Define texture material switching functions immediately (before texture loading)
         // Helper functions for simultaneous cross-fade (no gaps)
@@ -540,7 +551,7 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         };
 
         // Scale and position the model (maintain natural proportions)
-        ghostModel.scale.setScalar(1.2); // Slightly larger to fill orthographic view better
+        ghostModel.scale.setScalar(0.6); // 50% smaller than original 1.2 scale
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
         // Initialize base Y position for hover animation
@@ -550,125 +561,125 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
         ghostModel.userData.idleRotation = 0;
         
         scene.add(ghostModel);
-    });
+});
 
-    // Responsive background system with Zustand state management
-    function getResponsiveSize() {
-        const aspect = window.innerWidth / window.innerHeight;
-        const size = Math.max(window.innerWidth, window.innerHeight) * 0.002; // Responsive scaling
-        return { width: size * aspect * 2, height: size * 2 };
-    }
-    
-    const bgSize = getResponsiveSize();
-    const backgroundGeometry = new THREE.PlaneGeometry(bgSize.width, bgSize.height);
-    const videoGeometry = new THREE.PlaneGeometry(bgSize.width * 1.2, bgSize.height * 1.2); // Slightly larger for video
-    
-    // Background planes with Zustand state (using global variables)
-    
-    // Load background textures
-    blobs.forEach((blob, index) => {
-        const bgTexture = textureLoader.load(blob.backgroundTexture);
-        const bgMaterial = new THREE.MeshBasicMaterial({
-            map: bgTexture,
-            transparent: true,
-            opacity: index === 0 ? 1.0 : 0.0 // Only first background visible
-        });
-        
-        const bgPlane = new THREE.Mesh(backgroundGeometry, bgMaterial);
-        bgPlane.position.z = -15;
-        bgPlane.renderOrder = -5;
-        scene.add(bgPlane);
-        
-        backgroundPlanes.push(bgPlane);
-        backgroundMaterials.push(bgMaterial);
-    });
-    
-    // Video texture
-    const video = document.createElement('video');
-    video.src = './gh0st_loop.mp4';
-    video.loop = true;
-    video.muted = true;
-    video.autoplay = true;
-    video.playsInline = true;
-    
-    const videoTexture = new THREE.VideoTexture(video);
-    const videoMaterial = new THREE.MeshBasicMaterial({
-        map: videoTexture,
+// Responsive background system with Zustand state management
+function getResponsiveSize() {
+    const aspect = window.innerWidth / window.innerHeight;
+    const size = Math.max(window.innerWidth, window.innerHeight) * 0.002; // Responsive scaling
+    return { width: size * aspect * 2, height: size * 2 };
+}
+
+const bgSize = getResponsiveSize();
+const backgroundGeometry = new THREE.PlaneGeometry(bgSize.width, bgSize.height);
+const videoGeometry = new THREE.PlaneGeometry(bgSize.width * 1.2, bgSize.height * 1.2); // Slightly larger for video
+
+// Background planes with Zustand state (using global variables)
+
+// Load background textures
+blobs.forEach((blob, index) => {
+    const bgTexture = textureLoader.load(blob.backgroundTexture);
+    const bgMaterial = new THREE.MeshBasicMaterial({
+        map: bgTexture,
         transparent: true,
-        opacity: 0.2
+        opacity: index === 0 ? 1.0 : 0.0 // Only first background visible
     });
     
-    videoPlane = new THREE.Mesh(videoGeometry, videoMaterial);
-    videoPlane.position.z = -12;
-    videoPlane.renderOrder = -3;
-    scene.add(videoPlane);
+    const bgPlane = new THREE.Mesh(backgroundGeometry, bgMaterial);
+    bgPlane.position.z = -15;
+    bgPlane.renderOrder = -5;
+    scene.add(bgPlane);
     
-    video.play().catch(console.error);
+    backgroundPlanes.push(bgPlane);
+    backgroundMaterials.push(bgMaterial);
+});
+
+// Video texture
+const video = document.createElement('video');
+video.src = './gh0st_loop.mp4';
+video.loop = true;
+video.muted = true;
+video.autoplay = true;
+video.playsInline = true;
+
+const videoTexture = new THREE.VideoTexture(video);
+const videoMaterial = new THREE.MeshBasicMaterial({
+    map: videoTexture,
+    transparent: true,
+    opacity: 0.2
+});
+
+videoPlane = new THREE.Mesh(videoGeometry, videoMaterial);
+videoPlane.position.z = -12;
+videoPlane.renderOrder = -3;
+scene.add(videoPlane);
+
+video.play().catch(console.error);
+
+// Background switching with Zustand
+function switchBackground(backgroundIndex, duration = 0.5) {
+    const { setCurrentIndex } = carouselStore.getState();
     
-    // Background switching with Zustand
-    function switchBackground(backgroundIndex, duration = 0.5) {
-        const { setCurrentIndex } = carouselStore.getState();
-        
-        if (backgroundIndex < 0 || backgroundIndex >= blobs.length) return;
-                
-        backgroundMaterials.forEach((material, index) => {
-            gsap.to(material, {
-                opacity: index === backgroundIndex ? 1.0 : 0.0,
-                duration: duration,
-                ease: 'power2.inOut'
-            });
+    if (backgroundIndex < 0 || backgroundIndex >= blobs.length) return;
+            
+    backgroundMaterials.forEach((material, index) => {
+        gsap.to(material, {
+            opacity: index === backgroundIndex ? 1.0 : 0.0,
+            duration: duration,
+            ease: 'power2.inOut'
         });
-    }
-    
-    window.switchBackground = switchBackground;
-    window.cycleBackgrounds = function() {
-        const { currentIndex } = carouselStore.getState();
-        const nextIndex = (currentIndex + 1) % blobs.length;
-        switchBackground(nextIndex);
-    };
+    });
+}
 
-    // Position both cameras (closer for better zoom)
-    perspectiveCamera.position.z = 3;
-    orthographicCamera.position.z = 3;
+window.switchBackground = switchBackground;
+window.cycleBackgrounds = function() {
+    const { currentIndex } = carouselStore.getState();
+    const nextIndex = (currentIndex + 1) % blobs.length;
+    switchBackground(nextIndex);
+};
 
-    const clock = new THREE.Clock();
+// Position both cameras (closer for better zoom)
+perspectiveCamera.position.z = 3;
+orthographicCamera.position.z = 3;
+
+const clock = new THREE.Clock();
+
+// Variables for hover animation
+let hoverOffset = 0;
+const hoverAmplitude = 0.15; // How much to move up/down
+const hoverSpeed = 0.4; // Speed of hover animation
+
+// Start animation loop immediately using composer for post-processing
+function animate() {
+    requestAnimationFrame(animate);
     
-    // Variables for hover animation
-    let hoverOffset = 0;
-    const hoverAmplitude = 0.15; // How much to move up/down
-    const hoverSpeed = 0.4; // Speed of hover animation
+    const elapsedTime = clock.getElapsedTime();
     
-    // Start animation loop immediately using composer for post-processing
-    function animate() {
-        requestAnimationFrame(animate);
+    // Continuous sine wave hover animation for ghost model
+    if (ghostModel) {
+        // Calculate hover offset using sine wave
+        hoverOffset = Math.sin(elapsedTime * hoverSpeed) * hoverAmplitude;
         
-        const elapsedTime = clock.getElapsedTime();
-        
-        // Continuous sine wave hover animation for ghost model
-        if (ghostModel) {
-            // Calculate hover offset using sine wave
-            hoverOffset = Math.sin(elapsedTime * hoverSpeed) * hoverAmplitude;
-            
-            // Apply hover to Y position (independent of other animations)
-            // Store base Y position if not set
-            if (ghostModel.userData.baseY === undefined) {
-                ghostModel.userData.baseY = ghostModel.position.y;
-            }
-            
-            // Update Y position with hover effect
-            ghostModel.position.y = ghostModel.userData.baseY + hoverOffset;
-            
-            // Optional: Add subtle rotation on hover for more life
-            ghostModel.rotation.z = Math.sin(elapsedTime * hoverSpeed * 0.5) * 0.08; // Subtle tilt
+        // Apply hover to Y position (independent of other animations)
+        // Store base Y position if not set
+        if (ghostModel.userData.baseY === undefined) {
+            ghostModel.userData.baseY = ghostModel.position.y;
         }
         
-        // Update render pass camera before rendering
-        renderPass.camera = camera;
-        composer.render(); // Use composer instead of renderer to apply our contrast shader!
+        // Update Y position with hover effect
+        ghostModel.position.y = ghostModel.userData.baseY + hoverOffset;
+        
+        // Optional: Add subtle rotation on hover for more life
+        ghostModel.rotation.z = Math.sin(elapsedTime * hoverSpeed * 0.5) * 0.08; // Subtle tilt
     }
-    animate();
+    
+    // Update render pass camera before rendering
+    renderPass.camera = camera;
+    composer.render(); // Use composer instead of renderer to apply our contrast shader!
+}
+animate();
 
-    const textMaterial = new THREE.ShaderMaterial({
+const textMaterial = new THREE.ShaderMaterial({
         vertexShader : textVertex,
         fragmentShader : `void main(){ gl_FragColor = vec4(1.0); }`,
         side : THREE.DoubleSide,
@@ -1045,5 +1056,3 @@ rgbeLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_sma
             text.sync(); // Re-sync text with new settings
         });
     });
-
-});
