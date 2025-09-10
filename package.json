@@ -1,14 +1,17 @@
 {
   "name": "ghoststudio-carousel",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Interactive 3D Ghost Studio carousel for Webflow embedding",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:webflow": "vite build && echo 'Build complete! Upload /dist folder contents to your hosting for Webflow embedding.'",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "package": "npm run build && npm run package:zip && npm run package:tar",
+    "package:zip": "mkdir -p releases && zip -r releases/ghoststudio-carousel-v$(node -p \"require('./package.json').version\").zip dist/* -x '*.DS_Store'",
+    "package:tar": "mkdir -p releases && tar -czf releases/ghoststudio-carousel-v$(node -p \"require('./package.json').version\").tar.gz --exclude='*.DS_Store' dist/"
   },
   "devDependencies": {
     "vite": "^6.3.1"
