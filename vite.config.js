@@ -3,7 +3,7 @@ import glsl from 'vite-plugin-glsl'
 
 export default defineConfig({
   plugins: [glsl()],
-  base: './', // Use relative paths for assets
+  base: process.env.NODE_ENV === 'production' ? '/GhostStudio_Carousel/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

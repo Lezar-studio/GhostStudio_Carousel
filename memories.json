@@ -1,0 +1,76 @@
+{
+  "memories": [
+    {
+      "id": "mem_1755499009198_bmf9wccfo",
+      "content": "Merge analysis for updated-shadows into master:\n\nKEY DIFFERENCES:\n1. **updated-shadows removes HTML background system** - removes all background-container divs with images/videos from dist/index.html, leaving only canvas\n2. **master has Webflow-optimized structure** - keeps backgrounds as HTML elements with video loops for Webflow integration\n3. **Rendering differences**:\n   - updated-shadows: Uses EffectComposer with post-processing (ContrastShader, FXAA)\n   - master: Direct renderer.render() without post-processing\n4. **Lighting**:\n   - updated-shadows: Manual lights (ambient, directional) with shadows\n   - master: HDRI environment lighting only\n5. **Canvas settings**:\n   - updated-shadows: alpha:true (transparent background)\n   - master: standard opaque canvas\n6. **Material properties**:\n   - updated-shadows: Adds metalness, roughness, clearcoat to materials\n   - master: Simple materials without metallic properties\n7. **Animations**:\n   - updated-shadows: Hover animation with sine wave, more complex spin\n   - master: Simple rotation only\n\nCONFLICTS: Main conflict in src/main.js around renderer setup, lighting, materials, and animation loop",
+      "type": "config",
+      "tags": [
+        "config",
+        "merge",
+        "webflow",
+        "three.js",
+        "conflict-analysis"
+      ],
+      "timestamp": "2025-08-18T06:36:49.198Z",
+      "context": "Analyzing merge of updated-shadows branch into master for GhostStudio_Carousel project",
+      "accessCount": 0,
+      "lastAccessed": "2025-08-18T06:36:49.198Z",
+      "lastVerified": "2025-08-18T06:36:49.198Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1755499493657_bz9qgdk1e",
+      "content": "Merging updated-shadows branch into main for GhostStudio Carousel. Key differences:\n1. updated-shadows adds post-processing with EffectComposer, ContrastShader, and FXAA\n2. updated-shadows adds enhanced lighting (ambient + multiple directional lights)\n3. updated-shadows adds metalness/roughness/clearcoat to materials\n4. updated-shadows adds hover animation for ghost model\n5. updated-shadows has improved spin animation with wobble\n6. updated-shadows has responsive text settings\n7. Main branch keeps HTML background system for Webflow\n8. Both need canvas with alpha:false (opaque) for HTML backgrounds to show\n9. User wants ALL features working together on HTML canvas",
+      "type": "config",
+      "tags": [
+        "config",
+        "merge",
+        "ghoststudio",
+        "webflow",
+        "post-processing",
+        "animation"
+      ],
+      "timestamp": "2025-08-18T06:44:53.657Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-08-18T06:44:53.657Z",
+      "lastVerified": "2025-08-18T06:44:53.657Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1755499838674_xbk0opdxh",
+      "content": "Successfully merged updated-shadows branch into main for GhostStudio Carousel. Merge includes:\n1. Post-processing pipeline (EffectComposer, ContrastShader, FXAA)\n2. Enhanced lighting with multiple directional lights and shadows\n3. Metallic materials with clearcoat and environment mapping\n4. Hover animation for ghost model (sine wave Y-position)\n5. Improved spin animation with wobble and lift\n6. Responsive text system for mobile/tablet/desktop\n7. HTML background system preserved for Webflow\n8. Canvas remains opaque (alpha:false) for backgrounds\nDev server running at http://localhost:5173/",
+      "type": "config",
+      "tags": [
+        "config",
+        "merge-complete",
+        "ghoststudio",
+        "post-processing",
+        "animation",
+        "webflow"
+      ],
+      "timestamp": "2025-08-18T06:50:38.674Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-08-18T06:50:38.674Z",
+      "lastVerified": "2025-08-18T06:50:38.674Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1757507891838_t3qpcgf6k",
+      "content": "GitHub Pages deployment fix for GhostStudio_Carousel:\n\nProblem: 404 errors when deploying Vite app to GitHub Pages\n\nSolution:\n1. Updated vite.config.js to use correct base path: '/GhostStudio_Carousel/' in production\n2. Created GitHub Actions workflow (.github/workflows/deploy.yml) for automated deployment\n3. Workflow uses actions/deploy-pages@v4 with proper permissions\n\nKey configuration:\n- base: process.env.NODE_ENV === 'production' ? '/GhostStudio_Carousel/' : '/'\n- GitHub Actions handles building and deploying dist/ folder\n- Repository: https://github.com/Lezar-studio/GhostStudio_Carousel",
+      "type": "config",
+      "tags": [
+        "config",
+        "deployment",
+        "github-pages",
+        "vite",
+        "404-fix"
+      ],
+      "timestamp": "2025-09-10T12:38:11.838Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-09-10T12:38:11.838Z",
+      "lastVerified": "2025-09-10T12:38:11.838Z",
+      "status": "fresh"
+    }
+  ],
+  "lastUpdated": "2025-09-10T12:38:11.838Z"
+}
