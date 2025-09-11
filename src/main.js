@@ -566,8 +566,12 @@ gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
 // Responsive background system with Zustand state management
 function getResponsiveSize() {
     const aspect = window.innerWidth / window.innerHeight;
-    const size = Math.max(window.innerWidth, window.innerHeight) * 0.002; // Responsive scaling
-    return { width: size * aspect * 2, height: size * 2 };
+    // For orthographic camera, match the camera frustum size
+    // Camera is set to: -2*aspect, 2*aspect, 2, -2
+    // So the visible width is 4*aspect and height is 4
+    // Add extra margin to ensure full coverage even with slight camera movements
+    const margin = 1.5; // Extra margin to ensure full coverage
+    return { width: 4 * aspect * margin, height: 4 * margin };
 }
 
 const bgSize = getResponsiveSize();
