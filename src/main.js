@@ -76,7 +76,7 @@ const blobs = [
         backgroundTexture: './backgrounds/BG 2.png'
     },
     {
-        name: '& Web dev agency',
+        name: 'And web dev agency',
         background: '#FF0000',
         useGradient: false,
         materialTexture: './materials/TGG3.png',
@@ -130,15 +130,15 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-// Blender-inspired high contrast post-processing shader
+// Subtle post-processing shader for enhanced visuals
 const ContrastShader = {
     uniforms: {
         'tDiffuse': { value: null },
-        'contrast': { value: 1.1 }, // Gentle contrast enhancement
-        'brightness': { value: 1.1 }, // Natural brightness
-        'saturation': { value: 1.3 }, // Subtle saturation boost
+        'contrast': { value: 1.1 }, // 10% contrast enhancement
+        'brightness': { value: 1.0 }, // No brightness change
+        'saturation': { value: 1.1 }, // 10% saturation boost
         'gamma': { value: 1.0 }, // Standard gamma
-        'exposure': { value: 0.2 } // Slight exposure boost
+        'exposure': { value: 0.0 } // No exposure change
     },
     vertexShader: `
         varying vec2 vUv;
@@ -551,7 +551,9 @@ gltfLoader.load('./GHOST-FINAL.glb', function(gltf) {
         };
 
         // Scale and position the model (maintain natural proportions)
-        ghostModel.scale.setScalar(0.6); // 50% smaller than original 1.2 scale
+        // Model scale adjusted: was 0.6, now 0.72 (20% increase from 0.6)
+        // Original v1.0.0 scale was 1.2
+        ghostModel.scale.setScalar(0.72); // 20% larger than current 0.6, still 40% smaller than original 1.2
         ghostModel.position.set(0, 0, 0); // Center the ghost model
         
         // Initialize base Y position for hover animation
@@ -569,14 +571,14 @@ function getResponsiveSize() {
     // For orthographic camera, match the camera frustum size
     // Camera is set to: -2*aspect, 2*aspect, 2, -2
     // So the visible width is 4*aspect and height is 4
-    // Add extra margin to ensure full coverage even with slight camera movements
-    const margin = 1.5; // Extra margin to ensure full coverage
+    // Reduced margin for less zoom on video/backgrounds
+    const margin = 1.0; // Exact camera frustum size, no extra zoom
     return { width: 4 * aspect * margin, height: 4 * margin };
 }
 
 const bgSize = getResponsiveSize();
 const backgroundGeometry = new THREE.PlaneGeometry(bgSize.width, bgSize.height);
-const videoGeometry = new THREE.PlaneGeometry(bgSize.width * 1.2, bgSize.height * 1.2); // Slightly larger for video
+const videoGeometry = new THREE.PlaneGeometry(bgSize.width, bgSize.height); // Same size as backgrounds, crops naturally
 
 // Background planes with Zustand state (using global variables)
 
@@ -607,6 +609,8 @@ video.autoplay = true;
 video.playsInline = true;
 
 const videoTexture = new THREE.VideoTexture(video);
+videoTexture.center.set(0.5, 0.5); // Center the texture for cropping
+
 const videoMaterial = new THREE.MeshBasicMaterial({
     map: videoTexture,
     transparent: true,
@@ -617,6 +621,29 @@ videoPlane = new THREE.Mesh(videoGeometry, videoMaterial);
 videoPlane.position.z = -12;
 videoPlane.renderOrder = -3;
 scene.add(videoPlane);
+
+// Function to update video aspect ratio (crop instead of stretch)
+function updateVideoAspect() {
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const viewportAspect = window.innerWidth / window.innerHeight;
+
+    if (viewportAspect > videoAspect) {
+        // Viewport is wider - crop top/bottom
+        const scale = viewportAspect / videoAspect;
+        videoTexture.repeat.set(1, 1 / scale);
+        videoTexture.offset.set(0, (1 - 1 / scale) / 2);
+    } else {
+        // Viewport is taller - crop left/right
+        const scale = videoAspect / viewportAspect;
+        videoTexture.repeat.set(1 / scale, 1);
+        videoTexture.offset.set((1 - 1 / scale) / 2, 0);
+    }
+}
+
+// Update aspect when video loads
+video.addEventListener('loadedmetadata', updateVideoAspect);
 
 video.play().catch(console.error);
 
@@ -679,7 +706,15 @@ function animate() {
     
     // Update render pass camera before rendering
     renderPass.camera = camera;
-    composer.render(); // Use composer instead of renderer to apply our contrast shader!
+
+    // POST-PROCESSING ENABLED with subtle enhancements (2025-01-21)
+    // Current settings:
+    // - Brightness: 1.0 (no change)
+    // - Contrast: 1.1 (10% increase)
+    // - Saturation: 1.1 (10% increase)
+    // - Exposure: 0.0 (no change)
+    // - Gamma: 1.0 (standard)
+    composer.render(); // Apply subtle contrast and saturation enhancements
 }
 animate();
 
@@ -1041,11 +1076,14 @@ const textMaterial = new THREE.ShaderMaterial({
             plane.geometry.dispose();
             plane.geometry = new THREE.PlaneGeometry(newSize.width, newSize.height);
         });
-        
+
         if (videoPlane) {
             videoPlane.geometry.dispose();
-            videoPlane.geometry = new THREE.PlaneGeometry(newSize.width * 1.2, newSize.height * 1.2);
+            videoPlane.geometry = new THREE.PlaneGeometry(newSize.width, newSize.height);
         }
+
+        // Update video aspect ratio to crop properly
+        updateVideoAspect();
         
         // Update text sizes and positions on resize
         const settings = getResponsiveTextSettings();
